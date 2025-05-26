@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,6 +37,18 @@ var (
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#71eb34"))
 	}()
 )
+
+type keyMap struct {
+	Switch key.Binding
+	Quit   key.Binding
+	Send   key.Binding
+}
+
+var keys = keyMap{
+	Switch: key.NewBinding(key.WithKeys("ctrl+j", "ctrl+k")),
+	Quit:   key.NewBinding(key.WithKeys("ctrl+c")),
+	Send:   key.NewBinding(key.WithKeys("enter")),
+}
 
 type model struct {
 	content       string
@@ -72,16 +85,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC:
+		switch {
+		case key.Matches(msg, keys.Quit):
 			return m, tea.Quit
-		case tea.KeyCtrlJ, tea.KeyCtrlK:
+		case key.Matches(msg, keys.Switch):
 			if m.textInput.Focused() {
 				m.textInput.Blur()
 			} else {
 				m.textInput.Focus()
 			}
-		case tea.KeyEnter:
+		case key.Matches(msg, keys.Send):
 			if m.textInput.Focused() && !m.isAnswering {
 				question := m.textInput.Value()
 

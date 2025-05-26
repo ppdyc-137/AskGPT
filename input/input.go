@@ -1,6 +1,7 @@
 package input
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -9,6 +10,21 @@ type InputModel struct {
 	ti      textinput.Model
 	focused bool
 	mode    string
+	KeyMap  KeyMap
+}
+
+type KeyMap struct {
+	Left   key.Binding
+	Right  key.Binding
+	Escape key.Binding
+	Insert key.Binding
+}
+
+var DefaultKeyMap = KeyMap{
+	Left:   key.NewBinding(key.WithKeys("h")),
+	Right:  key.NewBinding(key.WithKeys("l")),
+	Escape: key.NewBinding(key.WithKeys("esc")),
+	Insert: key.NewBinding(key.WithKeys("i")),
 }
 
 var (
@@ -24,6 +40,7 @@ func New() InputModel {
 		ti:      ti,
 		focused: true,
 		mode:    insert,
+		KeyMap:  DefaultKeyMap,
 	}
 }
 
@@ -37,9 +54,9 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case msg.Type == tea.KeyEsc:
+		case key.Matches(msg, m.KeyMap.Escape):
 			m.enterNormal()
-		case msg.String() == "i" && m.mode == normal:
+		case key.Matches(msg, m.KeyMap.Insert) && m.mode == normal:
 			m.enterInsert()
 		}
 	}
@@ -48,10 +65,10 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 	if m.mode == normal {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			switch msg.String() {
-			case "h":
+			switch {
+			case key.Matches(msg, m.KeyMap.Left):
 				m.ti.SetCursor(m.ti.Position() - 1)
-			case "l":
+			case key.Matches(msg, m.KeyMap.Right):
 				m.ti.SetCursor(m.ti.Position() + 1)
 			}
 		}
