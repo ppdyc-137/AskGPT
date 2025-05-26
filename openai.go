@@ -20,7 +20,7 @@ type respMsg struct {
 	finished bool
 }
 
-func newClient(baseurl string, apikey string) openai.Client {
+func newGPTClient(baseurl string, apikey string) openai.Client {
 	return openai.NewClient(
 		option.WithBaseURL(baseurl),
 		option.WithAPIKey(apikey),
@@ -60,6 +60,13 @@ func (m gptModel) newConversation() tea.Cmd {
 
 			param.Messages = append(param.Messages, acc.Choices[0].Message.ToParam())
 		}
+	}
+}
+
+func (m gptModel) newQuestion(question string) tea.Cmd {
+	return func() tea.Msg {
+		m.askCh <- question
+		return nil
 	}
 }
 

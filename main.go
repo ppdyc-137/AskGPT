@@ -1,6 +1,7 @@
 package main
 
 import (
+	"askgpt/input"
 	"fmt"
 	"os"
 	"strings"
@@ -30,16 +31,28 @@ var (
 		b.Right = "├"
 		return titleStyle.BorderStyle(b)
 	}()
+
+	focusStyle = func() lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#71eb34"))
+	}()
 )
 
 type model struct {
-	content     string
-	ready       bool
-	viewport    viewport.Model
-	render      *glamour.TermRenderer
-	gpt         gptModel
-	isAnswering bool
-	textInput   textinput.Model
+	content       string
+	ready         bool
+	viewport      viewport.Model
+	textInput     input.InputModel
+	textInputMode bool
+	render        *glamour.TermRenderer
+	gpt           gptModel
+	isAnswering   bool
+}
+
+func (m *model) renderContent() {
+	if content, err := m.render.Render(m.content); err == nil {
+		m.viewport.SetContent(content)
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -53,30 +66,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
-	// mouse events in the viewport
+	// handle mouse events in the viewport
 	case tea.MouseMsg:
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
 		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+		case tea.KeyCtrlC:
 			return m, tea.Quit
-		case tea.KeyEnter:
-			question := m.textInput.Value()
-			m.gpt.askCh <- question
-
-			m.content += fmt.Sprintf("You ->\n%s\n\n", question)
-			m.content += fmt.Sprintf("GPT ->\n")
-			if content, err := m.render.Render(m.content); err == nil {
-				m.viewport.SetContent(content)
-				m.viewport.GotoBottom()
+		case tea.KeyCtrlJ, tea.KeyCtrlK:
+			if m.textInput.Focused() {
+				m.textInput.Blur()
+			} else {
+				m.textInput.Focus()
 			}
+		case tea.KeyEnter:
+			if m.textInput.Focused() && !m.isAnswering {
+				question := m.textInput.Value()
 
-			m.textInput.Reset()
-			m.isAnswering = true
+				m.content += fmt.Sprintf("You ->\n%s\n\n", question)
+				m.content += fmt.Sprintf("GPT ->\n")
+				m.renderContent()
+
+				m.textInput.Reset()
+				m.isAnswering = true
+
+				return m, m.gpt.newQuestion(question)
+			}
 		default:
-			m.textInput, cmd = m.textInput.Update(msg)
+			if !m.textInput.Focused() {
+				m.viewport, cmd = m.viewport.Update(msg)
+			}
 			cmds = append(cmds, cmd)
 		}
 
@@ -107,12 +128,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.content += msg.content
 		}
-		if content, err := m.render.Render(m.content); err == nil {
-			m.viewport.SetContent(content)
-			m.viewport.GotoBottom()
-		}
+		m.renderContent()
 		return m, m.gpt.waitForResponse()
 	}
+
+	m.textInput, cmd = m.textInput.Update(msg)
+	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
@@ -127,6 +148,9 @@ func (m model) View() string {
 func (m model) headerView() string {
 	title := titleStyle.Render("AskGPT")
 	line := strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(title)))
+	if !m.textInput.Focused() {
+		line = focusStyle.Render(line)
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
 
@@ -140,6 +164,9 @@ func (m model) footerView() string {
 	} else {
 		line = strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(info)))
 	}
+	if m.textInput.Focused() {
+		line = focusStyle.Render(line)
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
 
@@ -149,9 +176,6 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
-	ti := textinput.New()
-	ti.Focus()
 
 	baseurl := "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	apikey, ok := os.LookupEnv("API_KEY")
@@ -164,12 +188,12 @@ func main() {
 		model{
 			render: render,
 			gpt: gptModel{
-				client: newClient(baseurl, apikey),
+				client: newGPTClient(baseurl, apikey),
 				model:  "deepseek-v3",
 				askCh:  make(chan string),
 				respCh: make(chan respMsg),
 			},
-			textInput: ti,
+			textInput: input.New(),
 		},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
