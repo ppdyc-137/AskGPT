@@ -4,13 +4,23 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	promptStyle = func() lipgloss.Style {
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34eb8f"))
+	}()
 )
 
 type InputModel struct {
 	ti      textinput.Model
 	focused bool
 	mode    string
-	KeyMap  KeyMap
+
+	KeyMap           KeyMap
+	InsertModePrompt string
+	NormalModePrompt string
 }
 
 type KeyMap struct {
@@ -28,19 +38,22 @@ var DefaultKeyMap = KeyMap{
 }
 
 var (
-	insert string = "INSERT"
-	normal string = "NORMAL"
+	insertMode string = "INSERT"
+	normalMode string = "NORMAL"
 )
 
 func New() InputModel {
 	ti := textinput.New()
 	ti.Focus()
+	ti.Prompt = promptStyle.Render("> ")
 
 	return InputModel{
-		ti:      ti,
-		focused: true,
-		mode:    insert,
-		KeyMap:  DefaultKeyMap,
+		ti:               ti,
+		focused:          true,
+		mode:             insertMode,
+		KeyMap:           DefaultKeyMap,
+		InsertModePrompt: promptStyle.Render("> "),
+		NormalModePrompt: promptStyle.Render("< "),
 	}
 }
 
@@ -56,13 +69,14 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.KeyMap.Escape):
 			m.enterNormal()
-		case key.Matches(msg, m.KeyMap.Insert) && m.mode == normal:
+		case key.Matches(msg, m.KeyMap.Insert) && m.mode == normalMode:
 			m.enterInsert()
+			return m, nil
 		}
 	}
 
 	// handle cursor in normal mode
-	if m.mode == normal {
+	if m.mode == normalMode {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch {
@@ -74,7 +88,7 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 		}
 	}
 
-	if m.mode == insert {
+	if m.mode == insertMode {
 		m.ti, cmd = m.ti.Update(msg)
 	}
 
@@ -82,14 +96,14 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 }
 
 func (m *InputModel) enterNormal() {
-	m.mode = normal
+	m.mode = normalMode
 	m.ti.Cursor.Blink = false
-	// m.ti.Blur()
+	m.ti.Prompt = m.NormalModePrompt
 }
 
 func (m *InputModel) enterInsert() {
-	m.mode = insert
-	// m.ti.Focus()
+	m.mode = insertMode
+	m.ti.Prompt = m.InsertModePrompt
 }
 
 func (m InputModel) Value() string {
