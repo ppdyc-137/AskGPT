@@ -83,6 +83,7 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 
 func (m *InputModel) enterNormal() {
 	m.mode = normal
+	m.ti.Cursor.Blink = false
 	// m.ti.Blur()
 }
 
